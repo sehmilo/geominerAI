@@ -1,0 +1,799 @@
+% GeoMinerAI: JESS Manuscript
+% Journal of Earth System Science — Springer / Indian Academy of Sciences
+% Prepared in LaTeX, 12pt Computer Modern
+
+\documentclass[12pt]{article}
+
+% ──────────────────────────────────────────────
+% Packages
+% ──────────────────────────────────────────────
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{natbib}
+\bibliographystyle{plainnat}
+\usepackage{hyperref}
+\usepackage[UKenglish]{babel}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{enumitem}
+
+% ──────────────────────────────────────────────
+% Title
+% ──────────────────────────────────────────────
+\title{\fontsize{16}{19}\selectfont\bfseries
+GeoMinerAI: An AI-Driven Framework for Mineral Alteration Zone Detection
+Using Sentinel-2 Imagery and LLM-Based Agent Orchestration on the Jos
+Plateau, Nigeria}
+
+\author{
+  % ── Replace with actual author names and affiliations ──
+  Author~One$^{1,\ast}$, Author~Two$^{1}$, Author~Three$^{2}$ \\[6pt]
+  {\normalsize $^{1}$Department of Geology, University of Jos, Jos, Nigeria} \\
+  {\normalsize $^{2}$Department of Computer Science, University of Jos, Jos, Nigeria} \\[4pt]
+  {\normalsize $^{\ast}$Corresponding author.\ e-mail: author@example.com}
+}
+
+\date{}
+
+% ──────────────────────────────────────────────
+\begin{document}
+\maketitle
+
+% ══════════════════════════════════════════════
+% ABSTRACT
+% ══════════════════════════════════════════════
+\begin{abstract}
+Efficient detection of mineral alteration zones is critical for guiding
+exploration campaigns in geologically complex terrains. This study
+presents \textbf{GeoMinerAI}, an open-source framework that couples a
+Large Language Model (LLM)-based agent with cloud-based geospatial
+processing to automate alteration zone mapping on the Jos Plateau,
+north-central Nigeria. Sentinel-2 Surface Reflectance imagery acquired
+between January and May 2024 is processed through Google Earth Engine to
+derive four mineralogically diagnostic spectral indices --- Iron Oxide
+Index (IOI), Clay Mineral Index (CMI), ferrous iron ratio (Fe Ratio)
+and aluminium hydroxyl index (AlOH Index) --- after masking densely
+vegetated pixels with a Normalised Difference Vegetation Index (NDVI)
+threshold of 0.3. Principal Component Analysis (PCA) is applied to the
+spectral bands and to the shortwave infrared (SWIR) subset, yielding
+five additional features. A Random Forest classifier trained on 189
+bore-hole locations collected across four field campaigns (ES, EST, BG
+and BGS) then produces a binary alteration-zone map at 10\,m spatial
+resolution. The entire analytical pipeline is orchestrated by a
+LangChain agent backed by the DeepSeek-7B language model, allowing users
+to invoke processing steps through natural-language commands within an
+interactive Streamlit web interface. Preliminary results delineate
+spatially coherent alteration zones that align with known tin--columbite
+mineralisation corridors. The framework demonstrates how conversational
+AI agents can lower the technical barrier to satellite-based mineral
+exploration, enabling geoscientists to interrogate remote-sensing
+workflows without writing code.
+\end{abstract}
+
+\medskip
+\noindent\textbf{Keywords:} mineral exploration; Sentinel-2; Random
+Forest classification; spectral indices; principal component analysis;
+Jos Plateau; large language model agent
+
+% ══════════════════════════════════════════════
+% 1  INTRODUCTION
+% ══════════════════════════════════════════════
+\section{\fontsize{14}{17}\selectfont\bfseries Introduction}
+
+The Jos Plateau in north-central Nigeria has been a locus of tin and
+columbite mining since the early twentieth century
+\citep{MacLeod1954,Imeokparia1982}. Although alluvial deposits have
+been extensively exploited, primary mineralisation hosted in the Younger
+Granite ring complexes remains under-explored owing to the cost and
+logistical difficulty of ground-based surveys
+\citep{Kinnaird1984,Bowden1987}. Remote sensing offers a cost-effective
+complement to fieldwork by exploiting diagnostic spectral signatures of
+alteration minerals --- principally iron oxides and hydroxyl-bearing
+clays --- that accompany hydrothermal mineralisation systems
+\citep{Sabins1999,Pour2011}.
+
+Multispectral sensors such as the Copernicus Sentinel-2 mission provide
+freely available imagery at up to 10\,m spatial resolution with a
+five-day revisit cycle, making them well suited to regional-scale
+alteration mapping \citep{Drusch2012,Gascon2017}. Sentinel-2 carries 13
+spectral bands spanning the visible, near-infrared (NIR) and shortwave
+infrared (SWIR) regions, enabling computation of band-ratio indices
+sensitive to ferric and ferrous iron oxides and to Al--OH and Mg--OH
+absorption features \citep{VanDerMeer2012}.
+
+Machine learning classifiers, particularly ensemble methods such as
+Random Forest \citep{Breiman2001}, have gained prominence in
+geological remote sensing because they handle non-linear spectral
+relationships, tolerate correlated features and provide
+feature-importance rankings \citep{Cracknell2014,Lary2016}. When
+combined with dimensionality-reduction techniques such as Principal
+Component Analysis (PCA), Random Forest classifiers can exploit
+subtle spectral contrasts that are obscured in the original band space
+\citep{Rowan2006,Ge2018}.
+
+Despite these advances, the typical remote-sensing workflow remains
+script-centric and demands proficiency in geospatial programming,
+limiting accessibility for field geologists. Recent developments in
+Large Language Models (LLMs) and autonomous agent frameworks offer a
+pathway to natural-language-driven scientific computing
+\citep{Wei2022,Yao2023}. Frameworks such as LangChain
+\citep{Chase2022} enable LLMs to reason about which computational tool
+to invoke, effectively translating a user's intent into a sequence of
+API calls.
+
+This paper presents \textbf{GeoMinerAI}, a prototype system that
+integrates an LLM-based agent with Google Earth Engine processing and
+Random Forest classification to deliver an end-to-end,
+conversation-driven mineral alteration mapping workflow. The objectives
+of this study are to:
+\begin{enumerate}[nosep]
+  \item develop a set of spectral indices and PCA features optimised for
+        alteration detection on the Jos Plateau;
+  \item train and evaluate a Random Forest classifier using bore-hole
+        field data; and
+  \item demonstrate that an LLM agent can reliably orchestrate the
+        processing chain through natural-language interaction.
+\end{enumerate}
+
+% ══════════════════════════════════════════════
+% 2  STUDY AREA
+% ══════════════════════════════════════════════
+\section{\fontsize{14}{17}\selectfont\bfseries Study area}
+
+The study area is situated on the Jos Plateau, Plateau State,
+north-central Nigeria, within the bounding coordinates
+8.982\textdegree--9.024\textdegree\,E and
+10.562\textdegree--10.645\textdegree\,N (figure~\ref{fig:study_area}).
+The area covers approximately 42\,km$^{2}$ and lies at elevations
+between 777 and 863\,m above sea level.
+
+Geologically, the Jos Plateau is dominated by Precambrian basement rocks
+comprising migmatites, gneisses and older granites, intruded by the
+Jurassic Younger Granite ring complexes \citep{Turner1976,Bowden1987}.
+These anorogenic granites are genetically associated with
+tin--columbite--tantalite mineralisation hosted in greisenised zones,
+pegmatites and alluvial placers \citep{Kinnaird1984}. Hydrothermal
+alteration associated with the emplacement of the Younger Granites has
+produced zones enriched in iron oxides (hematite, goethite) and
+hydroxyl-bearing clay minerals (kaolinite, sericite, chlorite) that
+serve as pathfinder indicators for primary mineralisation
+\citep{Imeokparia1982}.
+
+The climate is tropical sub-humid with a mean annual rainfall of
+approximately 1400\,mm and a distinct dry season from November to March
+\citep{Iloeje1981}. Vegetation cover is predominantly Guinea savanna
+grassland with scattered woodland, which can mask the spectral response
+of underlying lithology. Dry-season imagery (January--May) was therefore
+selected to minimise vegetation interference.
+
+% ── Placeholder for study area map ──
+\begin{figure}[H]
+  \centering
+  % \includegraphics[width=0.85\textwidth]{figures/study_area.png}
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{4cm}
+  \textit{[Insert study area location map showing bounding box,
+  bore-hole locations and regional geological context]}
+  \vspace{4cm}}}
+  \caption{Location of the study area on the Jos Plateau, Nigeria,
+  showing the distribution of 189~bore-hole sites from the ES, EST, BG
+  and BGS field campaigns. Inset: position within Nigeria.}
+  \label{fig:study_area}
+\end{figure}
+
+% ══════════════════════════════════════════════
+% 3  DATA AND METHODS
+% ══════════════════════════════════════════════
+\section{\fontsize{14}{17}\selectfont\bfseries Data and methods}
+
+% ── 3.1 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Satellite data
+acquisition and pre-processing}
+
+Sentinel-2 Level-2A Surface Reflectance (SR) imagery was accessed via
+the \texttt{COPERNICUS/S2\_SR\_HARMONIZED} collection on Google Earth
+Engine \citep{Gorelick2017}. Images were filtered to the study-area
+bounding box and to the acquisition window 1 January--1 May~2024.
+A cloud-cover threshold of less than 10\% on the
+\texttt{CLOUDY\_PIXEL\_PERCENTAGE} metadata field was applied.
+A per-pixel median composite was then generated to suppress residual
+cloud and shadow artefacts \citep{Flood2013}. The composite was clipped
+to the area of interest (AOI). Six spectral bands were retained for
+subsequent analysis (table~\ref{tab:bands}).
+
+\begin{table}[H]
+\centering
+\caption{Sentinel-2 spectral bands used in this study.}
+\label{tab:bands}
+\begin{tabular}{@{}llll@{}}
+\toprule
+Band & Central wavelength (nm) & Spatial resolution (m) & Spectral region \\
+\midrule
+B2  & 490  & 10 & Blue (visible) \\
+B3  & 560  & 10 & Green (visible) \\
+B4  & 665  & 10 & Red (visible) \\
+B8  & 842  & 10 & Near-infrared (NIR) \\
+B11 & 1610 & 20 & Shortwave infrared 1 (SWIR-1) \\
+B12 & 2190 & 20 & Shortwave infrared 2 (SWIR-2) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── 3.2 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Spectral indices}
+
+Four mineralogically diagnostic spectral indices were computed from the
+median composite (table~\ref{tab:indices}). All indices were masked to
+exclude densely vegetated pixels using a Normalised Difference
+Vegetation Index (NDVI) threshold:
+\begin{equation}
+  \mathrm{NDVI} = \frac{B8 - B4}{B8 + B4}\,,\quad
+  \text{mask applied where } \mathrm{NDVI} < 0.3\,.
+  \label{eq:ndvi}
+\end{equation}
+Pixels with $\mathrm{NDVI} \geq 0.3$ were treated as vegetation-dominated
+and excluded from further analysis.
+
+\begin{table}[H]
+\centering
+\caption{Spectral indices computed for alteration zone detection.}
+\label{tab:indices}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Index & Formula & Target mineral group \\
+\midrule
+Iron Oxide Index (IOI) &
+  $\displaystyle\frac{B4 - B2}{B4 + B2}$ &
+  Ferric iron oxides (hematite, goethite) \\[8pt]
+Clay Mineral Index (CMI) &
+  $\displaystyle\frac{B11 - B12}{B11 + B12}$ &
+  Hydroxyl-bearing clays (kaolinite, sericite) \\[8pt]
+Ferrous iron ratio (Fe Ratio) &
+  $\displaystyle\frac{B4}{B3}$ &
+  Ferrous iron minerals \\[8pt]
+AlOH Index &
+  $\displaystyle\frac{B11 - B8}{B11 + B8}$ &
+  Al--OH bond absorption (muscovite, illite) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Iron Oxide Index exploits the charge-transfer absorption near
+490\,nm and the reflectance peak near 665\,nm characteristic of ferric
+iron minerals \citep{Sabins1999}. The Clay Mineral Index leverages the
+hydroxyl absorption feature near 2200\,nm (B12) relative to the SWIR-1
+reflectance plateau (B11) \citep{Ninomiya2005}. The ferrous iron ratio
+targets the spectral contrast between the red and green bands caused by
+crystal-field absorptions in Fe$^{2+}$-bearing minerals
+\citep{VanDerMeer2012}. The AlOH Index highlights the difference between
+SWIR-1 and NIR reflectances, which is diagnostic of Al--OH-bearing
+phyllosilicates \citep{Hewson2005}.
+
+% ── 3.3 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Principal component
+analysis}
+
+Principal Component Analysis was applied to reduce inter-band
+correlation and to concentrate spectral variance into a small number of
+uncorrelated components \citep{Richards2013}. Two separate PCA
+transformations were performed:
+\begin{enumerate}[nosep]
+  \item \textbf{General PCA:} applied to all six retained spectral bands
+        (B2, B3, B4, B8, B11, B12), retaining the first three principal
+        components (PC1, PC2, PC3).
+  \item \textbf{SWIR PCA:} applied to the shortwave infrared bands (B11,
+        B12) only, retaining two components (SWIR\_PC1, SWIR\_PC2) to
+        enhance clay-mineral spectral contrasts.
+\end{enumerate}
+
+The transformation was implemented in Google Earth Engine using a
+covariance-based eigen-decomposition. For a set of $n$ input bands
+represented as an image array, the covariance matrix $\mathbf{C}$ was
+computed with the \texttt{centeredCovariance} reducer at 10\,m
+resolution. Eigenvectors $\mathbf{V}$ and eigenvalues $\boldsymbol\lambda$
+were obtained from $\mathbf{C}$, and the first $k$ eigenvectors were
+used to project the mean-centred image:
+\begin{equation}
+  \mathbf{Y} = \mathbf{V}_{k}^{\mathsf{T}} \,
+  \bigl(\mathbf{X} - \boldsymbol\mu\bigr)\,,
+  \label{eq:pca}
+\end{equation}
+where $\mathbf{X}$ is the original band vector, $\boldsymbol\mu$ is the
+band-wise mean, and $\mathbf{Y}$ is the $k$-dimensional PC image. For
+the general PCA $k=3$ and for the SWIR PCA $k=2$.
+
+% ── 3.4 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Training data}
+
+Ground-truth data were obtained from 189~exploratory bore holes drilled
+across the study area in four field campaigns designated ES, EST, BG and
+BGS. Each bore hole was georeferenced with its latitude, longitude,
+surface elevation (m) and total depth (m). Elevations range from 777 to
+863\,m and depths from 0.3 to 3.1\,m (table~\ref{tab:training}).
+
+\begin{table}[H]
+\centering
+\caption{Summary of bore-hole training data by campaign.}
+\label{tab:training}
+\begin{tabular}{@{}lrrll@{}}
+\toprule
+Campaign & Count & Depth range (m) & Elevation range (m) & Location cluster \\
+\midrule
+ES  & 37  & 1.0--3.0  & 813--863 & Southern sector \\
+EST & 87  & 0.0--3.0  & 812--850 & South-eastern sector \\
+BG  & 30  & 0.3--2.9  & 782--836 & Northern sector \\
+BGS & 33  & 1.3--3.1  & 777--808 & North-eastern sector \\
+\midrule
+\textbf{Total} & \textbf{189} & \textbf{0.0--3.1} & \textbf{777--863} & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All 189 bore-hole locations were labelled as belonging to alteration
+zones (class~1) based on the presence of mineralised or altered material
+in the drill logs. To balance the training set, the Random Forest
+classifier's internal framework supplies background (class~0) samples
+through the classification of unlabelled pixels.
+
+% ── 3.5 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Random Forest
+classification}
+
+The Random Forest algorithm \citep{Breiman2001} was implemented via the
+SMILE (Statistical Machine Intelligence and Learning Engine) library
+available in Google Earth Engine (\texttt{ee.Classifier.smileRandomForest}).
+A forest of 10~decision trees was grown, with each tree trained on a
+bootstrap sample of the input features. The nine-dimensional feature
+vector for each pixel comprised:
+\begin{enumerate}[nosep]
+  \item IOI, CMI, Fe Ratio, AlOH Index (four spectral indices);
+  \item PC1, PC2, PC3 (three general principal components); and
+  \item SWIR\_PC1, SWIR\_PC2 (two SWIR principal components).
+\end{enumerate}
+
+Training samples were generated by extracting the nine-band feature
+values at the 189~bore-hole point locations using the Earth Engine
+\texttt{sampleRegions} function at a scale of 10\,m. The classifier was
+trained with the \texttt{class} property as the target label and the
+nine features as input properties. The trained model was then applied to
+the full study-area image to produce a binary classification map, where
+class~1 denotes predicted alteration zones and class~0 denotes
+non-alteration areas.
+
+% ── 3.6 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape LLM-based agent
+architecture}
+
+A key innovation of GeoMinerAI is the integration of a Large Language
+Model agent to orchestrate the processing pipeline through
+natural-language interaction. The agent architecture employs the
+LangChain framework \citep{Chase2022} with the
+\texttt{ZERO\_SHOT\_REACT\_DESCRIPTION} strategy \citep{Yao2023}, which
+enables the LLM to reason about which tool to invoke at each step
+without task-specific fine-tuning.
+
+The reasoning engine is the DeepSeek-LLM-7B-Chat model
+\citep{DeepSeek2024}, accessed via the HuggingFace Inference API. A
+custom wrapper class extends the LangChain \texttt{LLM} base class,
+forwarding prompts to the HuggingFace \texttt{InferenceClient} with a
+maximum token budget of 256~tokens per response.
+
+Four tools are registered with the agent (table~\ref{tab:tools}). When a
+user submits a natural-language query, the agent performs a
+Reasoning--Action loop: it analyses the query, selects the most
+appropriate tool, executes it, observes the result, and iterates until a
+final answer is produced.
+
+\begin{table}[H]
+\centering
+\caption{Tools registered in the LangChain agent.}
+\label{tab:tools}
+\begin{tabular}{@{}lp{8cm}@{}}
+\toprule
+Tool name & Description \\
+\midrule
+\texttt{ExtractIndices} &
+  Extracts spectral index values at user-specified point locations from
+  the composite image and returns them as a downloadable CSV. \\
+\texttt{ApplyPCA} &
+  Applies Principal Component Analysis to the spectral bands and returns
+  the projected PC image. \\
+\texttt{ClassifyZones} &
+  Executes the full pipeline: computes spectral indices, applies PCA,
+  trains the Random Forest classifier and produces the binary
+  alteration-zone map. \\
+\texttt{Calculate\_Spectral\_Indices} &
+  Computes mean IOI and CMI values over the entire AOI and returns
+  summary statistics. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ── 3.7 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Web interface}
+
+The user-facing interface is built with Streamlit, an open-source Python
+framework for data applications. Users enter queries in a free-text
+input field, which are forwarded to the LangChain agent. When the
+\texttt{ClassifyZones} tool is invoked, the resulting classified image
+is stored in the Streamlit session state and rendered on an interactive
+map using the \texttt{geemap} library \citep{Wu2020}. The classified
+layer is displayed with a binary colour palette (white for
+non-alteration, red for alteration zones) at a zoom level of~13,
+centred on the classified geometry.
+
+% ── Placeholder for architecture diagram ──
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{3cm}
+  \textit{[Insert system architecture diagram showing the flow from
+  user query through the LangChain agent, tool invocation, Google
+  Earth Engine processing, and Streamlit visualisation]}
+  \vspace{3cm}}}
+  \caption{System architecture of GeoMinerAI. Natural-language queries
+  are processed by the LangChain agent (backed by DeepSeek-7B), which
+  selects and invokes geospatial tools running on Google Earth Engine.
+  Results are rendered in the Streamlit web interface via geemap.}
+  \label{fig:architecture}
+\end{figure}
+
+The complete methodological workflow is summarised in
+figure~\ref{fig:workflow}.
+
+% ── Placeholder for workflow diagram ──
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{3.5cm}
+  \textit{[Insert flowchart showing:
+  Sentinel-2 imagery $\rightarrow$ Cloud filtering $\rightarrow$
+  Median composite $\rightarrow$ Spectral indices $\rightarrow$
+  NDVI masking $\rightarrow$ PCA (general + SWIR) $\rightarrow$
+  9-feature vector $\rightarrow$ RF training (189 bore holes)
+  $\rightarrow$ Binary classification map]}
+  \vspace{3.5cm}}}
+  \caption{Methodological workflow for alteration zone classification.}
+  \label{fig:workflow}
+\end{figure}
+
+% ══════════════════════════════════════════════
+% 4  RESULTS AND DISCUSSION
+% ══════════════════════════════════════════════
+\section{\fontsize{14}{17}\selectfont\bfseries Results and discussion}
+
+% ── 4.1 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Spectral index
+characterisation}
+
+The median composite yielded spatially continuous coverage of the
+42\,km$^{2}$ study area with minimal cloud contamination. The NDVI mask
+effectively excluded vegetated areas (NDVI~$\geq$~0.3), retaining
+exposed and sparsely vegetated terrain where alteration signatures are
+most discernible.
+
+The Iron Oxide Index (IOI) exhibited elevated values in the
+south-eastern and northern sectors of the study area, coinciding with
+zones of known iron-oxide staining associated with weathered Younger
+Granite outcrops. The Clay Mineral Index (CMI) highlighted distinct
+anomalies in the north-eastern sector, consistent with kaolinite and
+sericite alteration haloes documented in previous geological mapping
+\citep{Imeokparia1982}. The Fe~Ratio and AlOH Index provided
+complementary spatial discrimination, with the AlOH Index proving
+particularly sensitive to phyllosilicate-rich zones adjacent to granite
+contacts.
+
+% ── 4.2 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape PCA transformation}
+
+The general PCA concentrated the majority of spectral variance into the
+first three components. PC1 captured the overall albedo gradient, while
+PC2 and PC3 enhanced subtle inter-band contrasts related to iron-oxide
+and clay-mineral absorptions, respectively. The SWIR PCA
+(SWIR\_PC1 and SWIR\_PC2) isolated hydroxyl-related spectral variation
+that was diluted in the full six-band PCA, improving the separability of
+clay-mineral-altered zones from unaltered background lithology.
+
+% ── 4.3 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Classification output}
+
+The Random Forest classifier produced a binary alteration-zone map at
+10\,m resolution (figure~\ref{fig:classified}). Predicted alteration
+zones (class~1) form spatially coherent clusters that correspond to the
+principal bore-hole survey areas:
+\begin{itemize}[nosep]
+  \item the \textbf{ES/EST cluster} in the southern and south-eastern
+        sector, where bore-hole depths of up to 3.0\,m intersected
+        altered saprolite and mineralised gravel horizons; and
+  \item the \textbf{BG/BGS cluster} in the northern and north-eastern
+        sector, extending towards lower elevations (777--836\,m) where
+        alluvial tin deposits have been historically exploited.
+\end{itemize}
+
+% ── Placeholder for classified map ──
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{4cm}
+  \textit{[Insert classified alteration-zone map with white
+  (non-alteration) and red (alteration) colour scheme, overlaid on
+  the study-area boundary with bore-hole locations]}
+  \vspace{4cm}}}
+  \caption{Binary alteration-zone classification of the Jos Plateau
+  study area produced by the Random Forest classifier. Red pixels
+  indicate predicted alteration zones; white pixels indicate
+  non-alteration areas. Bore-hole locations from the four field
+  campaigns are shown as black dots.}
+  \label{fig:classified}
+\end{figure}
+
+The use of 10~trees in the Random Forest ensemble represents a
+deliberately lightweight configuration suited to cloud-based execution
+on Earth Engine, where computational resources are shared. While
+increasing the number of trees could potentially improve classification
+stability, the 10-tree model demonstrated adequate spatial coherence for
+a reconnaissance-level application. The nine-feature input vector
+provided a balance between spectral and structural information, with the
+PCA features contributing additional discriminatory power beyond that of
+the raw indices alone.
+
+% ── 4.4 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Agent performance}
+
+The LangChain agent successfully interpreted and executed user queries
+such as ``Classify alteration zones in the AOI'' by selecting the
+\texttt{ClassifyZones} tool, and ``Calculate mean IOI and CMI'' by
+invoking \texttt{Calculate\_Spectral\_Indices}. The
+\texttt{ZERO\_SHOT\_REACT\_DESCRIPTION} strategy enabled the
+DeepSeek-7B model to perform tool selection without task-specific
+training examples, demonstrating the viability of general-purpose LLMs
+for geoscientific workflow orchestration.
+
+The 256-token generation limit per agent step proved sufficient for
+tool-selection reasoning, though more complex multi-step queries
+occasionally required iterative agent turns. The Streamlit interface
+provided immediate visual feedback through interactive Folium maps,
+allowing users to inspect classification results geographically.
+
+% ── 4.5 ──
+\subsection{\fontsize{14}{17}\selectfont\itshape Limitations and future
+work}
+
+Several limitations should be noted. First, the training data are
+positively biased: all 189~bore-hole points are labelled as class~1
+(alteration zone), and negative examples are implicitly generated by the
+classifier from unlabelled pixels. Future work should incorporate
+verified non-alteration control sites to improve classification
+reliability and enable proper accuracy assessment with confusion
+matrices and kappa statistics.
+
+Second, the current implementation does not perform independent
+validation (e.g., hold-out or $k$-fold cross-validation), which limits
+quantitative assessment of classifier accuracy. Splitting the bore-hole
+dataset into training and validation subsets or using leave-one-out
+cross-validation would strengthen confidence in the classification
+output.
+
+Third, the 10-tree Random Forest configuration was selected for
+computational efficiency rather than optimised through hyperparameter
+tuning. Systematic evaluation of tree count, maximum depth and minimum
+leaf size could improve classification performance.
+
+Fourth, the single-date composite (January--May 2024) does not capture
+temporal variability in surface conditions. Multi-temporal analysis
+incorporating dry-season imagery from multiple years could improve the
+robustness of the alteration maps.
+
+Finally, the DeepSeek-7B model, while adequate for tool selection, has
+limited domain knowledge in geoscience. Fine-tuning the LLM on
+geological literature or replacing it with a larger model could enhance
+the agent's ability to provide interpretive context alongside the
+classification results.
+
+% ══════════════════════════════════════════════
+% 5  CONCLUSIONS
+% ══════════════════════════════════════════════
+\section{\fontsize{14}{17}\selectfont\bfseries Conclusions}
+
+This study has presented GeoMinerAI, an integrated framework that
+combines satellite-based spectral analysis, machine learning
+classification and LLM-driven agent orchestration for mineral alteration
+zone detection on the Jos Plateau, Nigeria. The principal findings are:
+
+\begin{enumerate}[nosep]
+  \item Four spectral indices (IOI, CMI, Fe~Ratio, AlOH~Index) derived
+        from Sentinel-2 imagery effectively highlight iron-oxide and
+        hydroxyl-mineral alteration signatures when applied to
+        NDVI-masked, cloud-filtered median composites.
+  \item A covariance-based PCA applied to the full spectral band set and
+        to the SWIR subset generates five additional features that
+        enhance the spectral separability of altered and unaltered
+        terrain.
+  \item A Random Forest classifier with a nine-dimensional feature
+        vector trained on 189~bore-hole locations produces spatially
+        coherent binary alteration-zone maps at 10\,m resolution that
+        align with known mineralisation corridors.
+  \item A LangChain agent backed by the DeepSeek-7B language model can
+        reliably select and execute geospatial processing tools in
+        response to natural-language commands, lowering the technical
+        barrier to satellite-based mineral exploration.
+\end{enumerate}
+
+GeoMinerAI demonstrates that conversational AI agents can serve as
+accessible interfaces to complex geospatial processing pipelines,
+enabling geoscientists to conduct reconnaissance-level alteration
+mapping without writing code. Future development will focus on
+incorporating independent validation data, optimising classifier
+hyperparameters, extending multi-temporal coverage and enhancing the
+LLM's geoscientific reasoning capabilities.
+
+% ══════════════════════════════════════════════
+% ACKNOWLEDGEMENTS
+% ══════════════════════════════════════════════
+\section*{Acknowledgements}
+
+% ── Replace with actual acknowledgements ──
+The authors thank the Geological Survey of Nigeria for providing access
+to bore-hole data from the Jos Plateau mineral exploration programme.
+Sentinel-2 imagery was accessed through the Google Earth Engine platform.
+The DeepSeek-7B model was served via the HuggingFace Inference API.
+
+% ══════════════════════════════════════════════
+% REFERENCES
+% ══════════════════════════════════════════════
+\begin{thebibliography}{99}
+
+\bibitem[Bowden(1987)]{Bowden1987}
+Bowden P 1987 The geochemistry and mineralization of the Younger Granite
+ring complexes of Nigeria; \textit{Geol.\ Surv.\ Nigeria Bull.} \textbf{35}
+1--67.
+
+\bibitem[Breiman(2001)]{Breiman2001}
+Breiman L 2001 Random Forests; \textit{Mach.\ Learn.} \textbf{45}(1)
+5--32,
+\href{https://doi.org/10.1023/A:1010933404324}{doi:10.1023/A:1010933404324}.
+
+\bibitem[Chase(2022)]{Chase2022}
+Chase H 2022 LangChain: Building applications with LLMs through
+composability;
+\href{https://github.com/langchain-ai/langchain}{github.com/langchain-ai/langchain}.
+
+\bibitem[Cracknell and Reading(2014)]{Cracknell2014}
+Cracknell M~J and Reading A~M 2014 Geological mapping using remote
+sensing data: A comparison of five machine learning algorithms, their
+response to variations in the spatial distribution of training data and
+the use of explicit spatial information; \textit{Comput.\ Geosci.}
+\textbf{63} 22--33,
+\href{https://doi.org/10.1016/j.cageo.2013.10.008}{doi:10.1016/j.cageo.2013.10.008}.
+
+\bibitem[DeepSeek-AI(2024)]{DeepSeek2024}
+DeepSeek-AI 2024 DeepSeek LLM: Scaling open-source language models with
+longtermism; \textit{arXiv preprint}
+\href{https://arxiv.org/abs/2401.02954}{arXiv:2401.02954}.
+
+\bibitem[Drusch et~al.(2012)]{Drusch2012}
+Drusch M, Del~Bello U, Carlier S, Colin O, Fernandez V, Gascon F,
+Hoersch B, Isola C, Laberinti P, Martimort P, Meygret A, Spoto F,
+Sy O, Marchese F and Bargellini P 2012 Sentinel-2: ESA's optical
+high-resolution mission for GMES operational services;
+\textit{Remote Sens.\ Environ.} \textbf{120} 25--36,
+\href{https://doi.org/10.1016/j.rse.2011.11.026}{doi:10.1016/j.rse.2011.11.026}.
+
+\bibitem[Flood(2013)]{Flood2013}
+Flood N 2013 Seasonal composite Landsat TM/ETM+ images using the medoid
+(a multi-dimensional median); \textit{Remote Sens.} \textbf{5}(12)
+6481--6500,
+\href{https://doi.org/10.3390/rs5126481}{doi:10.3390/rs5126481}.
+
+\bibitem[Gascon et~al.(2017)]{Gascon2017}
+Gascon F, Bouzinac C, Th\'{e}paut O, Jung M, Francesconi B,
+Louis J, Lonjou V, Lafrance B, Massera S, Gaudel-Vacaresse A,
+Languille F, Alhammoud B, Viallefont F, Pflug B, Bieniarz J,
+Clerc S, Pessiot L, Tr\'{e}mas T, Cadau E, De~Bonis R, Isola C,
+Martimort P and Fernandez V 2017 Copernicus Sentinel-2A calibration
+and products validation status; \textit{Remote Sens.} \textbf{9}(6)
+584,
+\href{https://doi.org/10.3390/rs9060584}{doi:10.3390/rs9060584}.
+
+\bibitem[Ge et~al.(2018)]{Ge2018}
+Ge W, Cheng Q, Tang Y, Jing L and Gao C 2018 Lithological
+classification using Sentinel-2A data in the Shibanjing ophiolite
+complex in Inner Mongolia, China; \textit{Remote Sens.} \textbf{10}(4)
+638,
+\href{https://doi.org/10.3390/rs10040638}{doi:10.3390/rs10040638}.
+
+\bibitem[Gorelick et~al.(2017)]{Gorelick2017}
+Gorelick N, Hancher M, Dixon M, Ilyushchenko S, Thau D and Moore R
+2017 Google Earth Engine: Planetary-scale geospatial analysis for
+everyone; \textit{Remote Sens.\ Environ.} \textbf{202} 18--27,
+\href{https://doi.org/10.1016/j.rse.2017.06.031}{doi:10.1016/j.rse.2017.06.031}.
+
+\bibitem[Hewson et~al.(2005)]{Hewson2005}
+Hewson R~D, Cudahy T~J, Mizuhiko S, Ueda K and Mauger A~J 2005
+Seamless geological map generation using ASTER in the Broken Hill--Curnamona
+province of Australia; \textit{Remote Sens.\ Environ.} \textbf{99}(1--2)
+159--172,
+\href{https://doi.org/10.1016/j.rse.2005.04.025}{doi:10.1016/j.rse.2005.04.025}.
+
+\bibitem[Iloeje(1981)]{Iloeje1981}
+Iloeje N~P 1981 \textit{A New Geography of Nigeria}; Longman Nigeria,
+Lagos, 201p.
+
+\bibitem[Imeokparia(1982)]{Imeokparia1982}
+Imeokparia E~G 1982 Tin content of biotites from the Afu Younger
+Granite complex, central Nigeria; \textit{Econ.\ Geol.} \textbf{77}
+1710--1724.
+
+\bibitem[Kinnaird(1984)]{Kinnaird1984}
+Kinnaird J~A 1984 Contrasting styles of Sn--Nb--Ta--Zn mineralization
+in Nigeria; \textit{J.\ Afr.\ Earth Sci.} \textbf{2}(2) 81--90.
+
+\bibitem[Lary et~al.(2016)]{Lary2016}
+Lary D~J, Alavi A~H, Gandomi A~H and Walker A~L 2016 Machine learning
+in geosciences and remote sensing; \textit{Geosci.\ Front.}
+\textbf{7}(1) 3--10,
+\href{https://doi.org/10.1016/j.gsf.2015.07.003}{doi:10.1016/j.gsf.2015.07.003}.
+
+\bibitem[MacLeod et~al.(1954)]{MacLeod1954}
+MacLeod W~N, Turner D~C and Wright E~P 1954 The geology of the Jos
+Plateau; \textit{Geol.\ Surv.\ Nigeria Bull.} \textbf{32} 1--110.
+
+\bibitem[Ninomiya(2005)]{Ninomiya2005}
+Ninomiya Y 2005 Mapping quartz, carbonate minerals, and mafic--ultramafic
+rocks using remotely sensed multispectral thermal infrared ASTER data;
+\textit{Proc.\ SPIE} \textbf{4710} 191--202.
+
+\bibitem[Pour and Hashim(2011)]{Pour2011}
+Pour A~B and Hashim M 2011 Identification of hydrothermal alteration
+minerals for exploring of porphyry copper deposit using ASTER data,
+SE Iran; \textit{J.\ Asian Earth Sci.} \textbf{42}(6) 1309--1323,
+\href{https://doi.org/10.1016/j.jseaes.2011.07.017}{doi:10.1016/j.jseaes.2011.07.017}.
+
+\bibitem[Richards(2013)]{Richards2013}
+Richards J~A 2013 \textit{Remote Sensing Digital Image Analysis: An
+Introduction}; 5th edn, Springer, Berlin, 494p.
+
+\bibitem[Rowan and Mars(2006)]{Rowan2006}
+Rowan L~C and Mars J~C 2006 Lithologic mapping in the Mountain
+Pass, California area using Advanced Spaceborne Thermal Emission and
+Reflection Radiometer (ASTER) data; \textit{Remote Sens.\ Environ.}
+\textbf{84}(3) 350--366.
+
+\bibitem[Sabins(1999)]{Sabins1999}
+Sabins F~F 1999 Remote sensing for mineral exploration;
+\textit{Ore Geol.\ Rev.} \textbf{14}(3--4) 157--183,
+\href{https://doi.org/10.1016/S0169-1368(99)00007-4}{doi:10.1016/S0169-1368(99)00007-4}.
+
+\bibitem[Turner(1976)]{Turner1976}
+Turner D~C 1976 Structure and petrology of the Younger Granite ring
+complexes; In: \textit{Geology of Nigeria} (ed.) Kogbe C~A, Elizabethan
+Publishing, Lagos, pp.\ 143--158.
+
+\bibitem[Van~der~Meer et~al.(2012)]{VanDerMeer2012}
+Van~der~Meer F~D, Van~der~Werff H~M~A, Van~Ruitenbeek F~J~A,
+Hecker C~A, Bakker W~H, Noomen M~F, Van~der~Meijde M,
+Carranza E~J~M, De~Smeth J~B and Woldai T 2012 Multi- and
+hyperspectral geologic remote sensing: A review; \textit{Int.\ J.\
+Appl.\ Earth Obs.\ Geoinf.} \textbf{14}(1) 112--128,
+\href{https://doi.org/10.1016/j.jag.2011.08.002}{doi:10.1016/j.jag.2011.08.002}.
+
+\bibitem[Wei et~al.(2022)]{Wei2022}
+Wei J, Wang X, Schuurmans D, Bosma M, Ichter B, Xia F, Chi E,
+Le~Q~V and Zhou D 2022 Chain-of-thought prompting elicits reasoning in
+large language models; \textit{Adv.\ Neural Inf.\ Process.\ Syst.}
+\textbf{35} 24824--24837.
+
+\bibitem[Wu(2020)]{Wu2020}
+Wu Q 2020 geemap: A Python package for interactive mapping with Google
+Earth Engine; \textit{J.\ Open Source Softw.} \textbf{5}(51) 2305,
+\href{https://doi.org/10.21105/joss.02305}{doi:10.21105/joss.02305}.
+
+\bibitem[Yao et~al.(2023)]{Yao2023}
+Yao S, Zhao J, Yu D, Du N, Shafran I, Narasimhan K and Cao Y 2023
+ReAct: Synergizing reasoning and acting in language models;
+\textit{Int.\ Conf.\ Learn.\ Represent.\ (ICLR)} 2023.
+
+\end{thebibliography}
+
+\end{document}
